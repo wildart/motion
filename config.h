@@ -20,10 +20,10 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if you have MySQL support */
-#define HAVE_MYSQL 1
+//#define HAVE_MYSQL 1
 
 /* Define to 1 if you have PostgreSQL support */
-#define HAVE_PGSQL 1
+//#define HAVE_PGSQL 1
 
 /* Define to 1 if you have SDL support */
 /* #undef HAVE_SDL */

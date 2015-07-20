@@ -760,7 +760,7 @@ config_param config_params[] = {
     copy_string,
     print_string
     },
-#ifdef HAVE_FFMPEG
+#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
     {
     "ffmpeg_output_movies",
     "\n############################################################\n"
@@ -831,6 +831,7 @@ config_param config_params[] = {
     copy_int,
     print_int
     },
+#ifdef HAVE_FFMPEG
     {
     "ffmpeg_video_codec",
     "# Codec to used by ffmpeg for the video compression.\n"
@@ -861,6 +862,7 @@ config_param config_params[] = {
     print_bool
     },
 #endif /* HAVE_FFMPEG */
+#endif /* HAVE_FFMPEG || HAVE_OMX */
 #ifdef HAVE_SDL
      {
     "sdl_threadnr",
@@ -1062,7 +1064,7 @@ config_param config_params[] = {
     copy_string,
     print_string
     },
-#ifdef HAVE_FFMPEG
+#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
     {
     "movie_filename",
     "# File path for motion triggered ffmpeg films (movies) relative to target_dir\n"
@@ -1088,7 +1090,7 @@ config_param config_params[] = {
     copy_string,
     print_string
     },
-#endif /* HAVE_FFMPEG */
+#endif /* HAVE_FFMPEG || HAVE_OMX */
     {
     "ipv6_enabled",
     "\n############################################################\n"

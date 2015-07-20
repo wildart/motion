@@ -425,7 +425,7 @@ struct context {
     unsigned int moved;
     unsigned int pause;
     int missing_frame_counter;               /* counts failed attempts to fetch picture frame from camera */
-    unsigned int lost_connection;    
+    unsigned int lost_connection;
 
 #if (defined(BSD))
     int tuner_dev;
@@ -436,7 +436,7 @@ struct context {
 
     struct stream stream;
     int stream_count;
-    
+
 #if defined(HAVE_MYSQL) || defined(HAVE_PGSQL) || defined(HAVE_SQLITE3)
     int sql_mask;
 #endif
@@ -458,11 +458,15 @@ struct context {
     char extpipefilename[PATH_MAX];
     int movie_last_shot;
 
+#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
 #ifdef HAVE_FFMPEG
     struct ffmpeg *ffmpeg_output;
     struct ffmpeg *ffmpeg_output_debug;
     struct ffmpeg *ffmpeg_timelapse;
     struct ffmpeg *ffmpeg_smartmask;
+#elif HAVE_OMS
+    struct omx *omx_output;
+#endif
     char timelapsefilename[PATH_MAX];
     char motionfilename[PATH_MAX];
 #endif

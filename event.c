@@ -9,6 +9,7 @@
 */
 
 #include "ffmpeg.h"    /* must be first to avoid 'shadow' warning */
+#include "omx.h"       /* must be first to avoid 'shadow' warning */
 #include "picture.h"   /* already includes motion.h */
 #include "event.h"
 #if (!defined(BSD))
@@ -561,14 +562,6 @@ static void event_new_video(struct context *cnt, int type ATTRIBUTE_UNUSED,
         cnt->movie_fps = 2;
 }
 
-#ifdef HAVE_FFMPEG
-
-static void grey2yuv420p(unsigned char *u, unsigned char *v, int width, int height)
-{
-    memset(u, 128, width * height / 4);
-    memset(v, 128, width * height / 4);
-}
-
 #define FFMPEG_SELECT_IMAGE                                             \
     int width;                                                          \
     int height;                                                         \
@@ -583,6 +576,14 @@ static void grey2yuv420p(unsigned char *u, unsigned char *v, int width, int heig
         height = cnt->imgs.height;                                      \
         img = imgdat->image;                                            \
     }
+
+static void grey2yuv420p(unsigned char *u, unsigned char *v, int width, int height)
+{
+    memset(u, 128, width * height / 4);
+    memset(v, 128, width * height / 4);
+}
+
+#ifdef HAVE_FFMPEG
 
 static void event_ffmpeg_newfile(struct context *cnt, int type ATTRIBUTE_UNUSED,
             unsigned char *dummy1 ATTRIBUTE_UNUSED, char *dummy2 ATTRIBUTE_UNUSED,
@@ -819,6 +820,113 @@ static void event_ffmpeg_timelapseend(struct context *cnt,
 
 #endif /* HAVE_FFMPEG */
 
+#ifdef HAVE_OMX
+
+static void event_omx_newfile(struct context *cnt, int type ATTRIBUTE_UNUSED,
+            unsigned char *dummy1 ATTRIBUTE_UNUSED, char *dummy2 ATTRIBUTE_UNUSED,
+            void *eventdata, struct tm *currenttime_tm)
+{
+    struct image_data* imgdat = (struct image_data*) eventdata;
+    FFMPEG_SELECT_IMAGE;
+
+    unsigned char *convbuf, *y, *u, *v;
+    char stamp[PATH_MAX];
+    const char *moviepath;
+
+    if (!cnt->conf.ffmpeg_output && !cnt->conf.ffmpeg_output_debug)
+        return;
+
+    /*
+     *  conf.mpegpath would normally be defined but if someone deleted it by control interface
+     *  it is better to revert to the default than fail
+     */
+    if (cnt->conf.moviepath)
+        moviepath = cnt->conf.moviepath;
+    else
+        moviepath = DEF_MOVIEPATH;
+
+    mystrftime(cnt, stamp, sizeof(stamp), moviepath, currenttime_tm, NULL, 0);
+
+    /*
+     *  motion movies get the same name as normal movies plus an appended 'm'
+     *  PATH_MAX - 4 to allow for .mpg to be appended without overflow
+     */
+    snprintf(cnt->motionfilename, PATH_MAX - 4, "%s/%sm", cnt->conf.filepath, stamp);
+    snprintf(cnt->newfilename, PATH_MAX - 4, "%s/%s", cnt->conf.filepath, stamp);
+
+    if (cnt->conf.ffmpeg_output) {
+
+        if (cnt->imgs.type == VIDEO_PALETTE_GREY) {
+            convbuf = mymalloc((width * height) / 2);
+            y = img;
+            u = convbuf;
+            v = convbuf + (width * height) / 4;
+            grey2yuv420p(u, v, width, height);
+        } else {
+            convbuf = NULL;
+            y = img;
+            u = img + width * height;
+            v = u + (width * height) / 4;
+        }
+
+        if ((cnt->omx_output =
+                omx_open(cnt->newfilename, y, u, v,
+                         width, height, cnt->movie_fps, cnt->conf.ffmpeg_bps,
+                         cnt->conf.ffmpeg_vbr)) == NULL)
+        {
+            MOTION_LOG(ERR, TYPE_EVENTS, SHOW_ERRNO, "%s: ffopen_open error creating (new) file [%s]",
+                       cnt->newfilename);
+            cnt->finish = 1;
+            return;
+        }
+
+        ((struct omx *)cnt->omx_output)->udata = convbuf;
+        event(cnt, EVENT_FILECREATE, NULL, cnt->newfilename, (void *)FTYPE_MPEG, NULL);
+    }
+}
+
+static void event_omx_put(struct context *cnt, int type ATTRIBUTE_UNUSED,
+            unsigned char *dummy1 ATTRIBUTE_UNUSED, char *dummy2 ATTRIBUTE_UNUSED,
+            void * eventdata, struct tm *tm ATTRIBUTE_UNUSED)
+{
+    if (cnt->ffmpeg_output) {
+        struct image_data* imgdat = (struct image_data*)eventdata;
+        FFMPEG_SELECT_IMAGE;
+
+        unsigned char *y = img;
+        unsigned char *u, *v;
+
+        if (cnt->imgs.type == VIDEO_PALETTE_GREY)
+            u = cnt->omx_output->udata;
+        else
+            u = y + (width * height);
+
+        v = u + (width * height) / 4;
+
+        if (omx_put_image(cnt->omx_output, y, u, v) == -1) {
+            cnt->finish = 1;
+            cnt->restart = 0;
+        }
+    }
+}
+
+static void event_omx_closefile(struct context *cnt,
+            int type ATTRIBUTE_UNUSED, unsigned char *dummy1 ATTRIBUTE_UNUSED,
+            char *dummy2 ATTRIBUTE_UNUSED, void *dummy3 ATTRIBUTE_UNUSED,
+            struct tm *tm ATTRIBUTE_UNUSED)
+{
+    if (cnt->omx_output) {
+        if (cnt->omx_output->udata)
+            free(cnt->omx_output->udata);
+
+        omx_close(cnt->omx_output);
+        cnt->omx_output = NULL;
+
+        event(cnt, EVENT_FILECLOSE, NULL, cnt->newfilename, (void *)FTYPE_MPEG, NULL);
+    }
+}
+#endif /* HAVE_OMX */
+
 
 /*
  * Starting point for all events
@@ -926,6 +1034,24 @@ struct event_handlers event_handlers[] = {
     event_ffmpeg_timelapseend
     },
 #endif /* HAVE_FFMPEG */
+#ifdef HAVE_OMX
+    {
+    EVENT_FIRSTMOTION,
+    event_omx_newfile
+    },
+    {
+    EVENT_IMAGE_DETECTED,
+    event_omx_put
+    },
+    {
+    EVENT_FFMPEG_PUT,
+    event_omx_put
+    },
+    {
+    EVENT_ENDMOTION,
+    event_omx_closefile
+    },
+#endif /* HAVE_OMX */
     {
     EVENT_FILECLOSE,
     on_movie_end_command

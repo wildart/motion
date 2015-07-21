@@ -1,9 +1,12 @@
 #ifndef _INCLUDE_OMX_H_
 #define _INCLUDE_OMX_H_
 
+#include <stdio.h>
+
 #ifdef HAVE_OMX
 #include "bcm_host.h"
 #include "ilclient.h"
+#endif /* HAVE_OMX */
 
 struct omx {
 #ifdef HAVE_OMX
@@ -19,7 +22,7 @@ struct omx {
     int vbr;                /* variable bitrate setting */
 #else
     int dummy;
-#endif
+#endif /* HAVE_OMX */
 };
 
 /* Initialize OMX stuff. Needs to be called before omx_open. */
@@ -35,7 +38,6 @@ void omx_stop(void);
  * timelapse video, use TIMELAPSE_CODEC as codec name.
  */
 struct omx *omx_open(
-    char *ffmpeg_video_codec,
     char *filename,
     unsigned char *y,    /* YUV420 Y plane */
     unsigned char *u,    /* YUV420 U plane */

@@ -28,6 +28,32 @@ void omx_def(OMX_PARAM_PORTDEFINITIONTYPE def)
 }
 
 /**
+ * omx_cleanups
+ *      Clean up ffmpeg struct if something was wrong.
+ *
+ * Returns
+ *      Function returns nothing.
+ */
+void omx_cleanups(struct omx *omx)
+{
+    OMX_STATETYPE state;
+    OMX_ERRORTYPE r;
+    r = OMX_GetState(ilclient, &state);
+    if (r != OMX_ErrorNone) {
+        MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: OMX_GetState() failed with %x!", r);
+    } else {
+        if (state == OMX_StateExecuting) {
+            ilclient_change_component_state(video_encode, OMX_StateIdle);
+            state = OMX_StateIdle;
+        }
+        if (state == OMX_StateIdle) {
+            ilclient_change_component_state(video_encode, OMX_StateLoaded);
+        }
+    }
+    free(omx);
+}
+
+/**
  * omx_init
  *      Initializes for OMX.
  *
@@ -38,15 +64,18 @@ void omx_init(void)
 {
     OMX_ERRORTYPE r;
 
+    bcm_host_init();
+
     MOTION_LOG(NTC, TYPE_ENCODER, NO_ERRNO, "%s: OMX encoder init");
 
     if ((ilclient = ilclient_init()) == NULL) {
-        MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO, "%s: ilclient_init() failed");
+        MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: ilclient_init() failed");
         return NULL;
     }
 
-    if (OMX_Init() != OMX_ErrorNone) {
-        MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO, "%s: OMX_Init() failed");
+    r = OMX_Init();
+    if (r != OMX_ErrorNone) {
+        MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: OMX_Init() failed with %x!", r);
         ilclient_destroy(ilclient);
         return NULL;
     }
@@ -57,7 +86,7 @@ void omx_init(void)
             ILCLIENT_ENABLE_INPUT_BUFFERS |
             ILCLIENT_ENABLE_OUTPUT_BUFFERS);
     if (r != 0) {
-        MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO,
+        MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO,
             "%s: ilclient_create_component() for video_encode failed with %x!", r);
         return NULL;
     }
@@ -69,7 +98,7 @@ void omx_stop(void)
     memset(list, 0, sizeof(list));
     list[0] = video_encode;
 
-    MOTION_LOG(NTC, TYPE_ENCODER, NO_ERRNO, "%s: disabling port buffers for 200 and 201")
+    MOTION_LOG(NTC, TYPE_ENCODER, NO_ERRNO, "%s: disabling port buffers for 200 and 201");
     ilclient_disable_port_buffers(video_encode, 200, NULL, NULL, NULL);
     ilclient_disable_port_buffers(video_encode, 201, NULL, NULL, NULL);
 
@@ -96,6 +125,14 @@ struct omx *omx_open(char *filename,
     omx->width = width;
     omx->height = height;
 
+    // open output file
+    strncat(filename, ".mp4", 4);
+    omx->output = fopen(filename, "w");
+    if (omx->output == NULL) {
+        omx_cleanups(omx);
+        return NULL;
+    }
+
     // get current settings of video_encode component from port 200
     memset(&omx->def, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
     omx->def.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
@@ -111,26 +148,25 @@ struct omx *omx_open(char *filename,
         return NULL;
     }
 
-    omx_def(omx->dev)
+    omx_def(omx->def);
 
     // set encoding resolution
     omx->def.format.video.nFrameWidth = width;
     omx->def.format.video.nFrameHeight = height;
-    omx->def.format.video.xFramerate = rate;
-    omx->def.format.video.nSliceHeight = def.format.video.nFrameHeight;
-    omx->def.format.video.nStride = def.format.video.nFrameWidth;
+    omx->def.format.video.xFramerate = rate << 16;
+    omx->def.format.video.nSliceHeight = omx->def.format.video.nFrameHeight;
+    omx->def.format.video.nStride = omx->def.format.video.nFrameWidth;
     omx->def.format.video.eColorFormat = OMX_COLOR_FormatYUV420PackedPlanar;
 
     r = OMX_SetParameter(ILC_GET_HANDLE(video_encode), OMX_IndexParamPortDefinition, &omx->def);
     if (r != OMX_ErrorNone) {
         MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO,
-            "%s: %s:%d: OMX_SetParameter() for video_encode port 200 failed with %x!",
-            __FUNCTION__, __LINE__, r);
+            "%s: %d: OMX_SetParameter() for video_encode port 200 failed with %x!", __LINE__, r);
         omx_cleanups(omx);
         return NULL;
     }
 
-    omx_def(omx->dev)
+    omx_def(omx->def);
 
     // set format type
     memset(&omx->format, 0, sizeof(OMX_VIDEO_PARAM_PORTFORMATTYPE));
@@ -150,16 +186,15 @@ struct omx *omx_open(char *filename,
 
     // set current bitrate to 1Mbit
     memset(&omx->bitrateType, 0, sizeof(OMX_VIDEO_PARAM_BITRATETYPE));
-    bitrateType.nSize = sizeof(OMX_VIDEO_PARAM_BITRATETYPE);
-    bitrateType.nVersion.nVersion = OMX_VERSION;
-    bitrateType.eControlRate = OMX_Video_ControlRateVariable;
-    bitrateType.nTargetBitrate = bps;
-    bitrateType.nPortIndex = 201;
+    omx->bitrateType.nSize = sizeof(OMX_VIDEO_PARAM_BITRATETYPE);
+    omx->bitrateType.nVersion.nVersion = OMX_VERSION;
+    omx->bitrateType.eControlRate = OMX_Video_ControlRateVariable;
+    omx->bitrateType.nTargetBitrate = bps;
+    omx->bitrateType.nPortIndex = 201;
     r = OMX_SetParameter(ILC_GET_HANDLE(video_encode), OMX_IndexParamVideoBitrate, &omx->bitrateType);
     if (r != OMX_ErrorNone) {
         MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO,
-            "%s: %s:%d: OMX_SetParameter() for bitrate for video_encode port 201 failed with %x!",
-            __FUNCTION__, __LINE__, r);
+            "%s: %d: OMX_SetParameter() for bitrate for video_encode port 201 failed with %x!", __LINE__, r);
         omx_cleanups(omx);
         return NULL;
     }
@@ -167,8 +202,7 @@ struct omx *omx_open(char *filename,
     // Change state to IDLE
     if (ilclient_change_component_state(video_encode, OMX_StateIdle) == -1) {
         MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO,
-            "%s: %s:%d: ilclient_change_component_state(video_encode, OMX_StateIdle) failed",
-            __FUNCTION__, __LINE__);
+            "%s: %d: ilclient_change_component_state(video_encode, OMX_StateIdle) failed", __LINE__);
     }
 
     // Enable ports
@@ -186,51 +220,7 @@ struct omx *omx_open(char *filename,
     // Change state to EXECUTING
     ilclient_change_component_state(video_encode, OMX_StateExecuting);
 
-    omx->output = fopen(filename, "w");
-    if (omx->output == NULL) {
-        omx_cleanups(omx);
-        return NULL;
-    }
-
-
-    return omx
-}
-
-/**
- * omx_put_image
- *      Puts an arbitrary picture defined by y, u and v.
- *
- * Returns
- *      Number of bytes written by omx_put_image
- *      -1 if any error happens in omx_put_image
- *       0 if error allocating picture.
- */
-int omx_put_image(struct omx *omx, unsigned char *y,
-                  unsigned char *u, unsigned char *v)
-{
-    int ret = 0;
-    OMX_ERRORTYPE r;
-    OMX_BUFFERHEADERTYPE *out;
-
-    /* fill input buffer */
-    ret = omx_prepare_frame(omx, y, u, v);
-    if (ret) {
-        // Allocate filling buffer
-        out = ilclient_get_output_buffer(video_encode, 201, 1);
-        r = OMX_FillThisBuffer(ILC_GET_HANDLE(video_encode), out);
-        if (r != OMX_ErrorNone) {
-            MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: Error filling buffer: %x", r));
-        }
-
-        if (out != NULL) {
-            ret = fwrite(out->pBuffer, 1, out->nFilledLen, omx->output);
-            if (r != out->nFilledLen) {
-               printf("fwrite: Error emptying buffer: %d!\n", r);
-               MOTION_LOG(ERR, TYPE_ENCODER, SHOW_ERRNO, "%s: fwrite: Error emptying buffer: %d!", ret));
-            }
-        }
-    }
-    return ret;
+    return omx;
 }
 
 /**
@@ -262,18 +252,40 @@ int omx_prepare_frame(struct omx *omx, unsigned char *y,
     return ret;
 }
 
-
 /**
- * omx_cleanups
- *      Clean up ffmpeg struct if something was wrong.
+ * omx_put_image
+ *      Puts an arbitrary picture defined by y, u and v.
  *
  * Returns
- *      Function returns nothing.
+ *      Number of bytes written by omx_put_image
+ *      -1 if any error happens in omx_put_image
+ *       0 if error allocating picture.
  */
-void omx_cleanups(struct omx *omx)
+int omx_put_image(struct omx *omx, unsigned char *y,
+                  unsigned char *u, unsigned char *v)
 {
-    free(omx->video_outbuf);
-    free(omx);
+    int ret = 0;
+    OMX_ERRORTYPE r;
+    OMX_BUFFERHEADERTYPE *out;
+
+    /* fill input buffer */
+    ret = omx_prepare_frame(omx, y, u, v);
+    if (ret) {
+        // Allocate filling buffer
+        out = ilclient_get_output_buffer(video_encode, 201, 1);
+        r = OMX_FillThisBuffer(ILC_GET_HANDLE(video_encode), out);
+        if (r != OMX_ErrorNone) {
+            MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: Error filling buffer: %x", r);
+        }
+
+        if (out != NULL) {
+            ret = fwrite(out->pBuffer, 1, out->nFilledLen, omx->output);
+            if (ret != out->nFilledLen) {
+               MOTION_LOG(ERR, TYPE_ENCODER, NO_ERRNO, "%s: fwrite: Error emptying buffer: %d!", ret);
+            }
+        }
+    }
+    return ret;
 }
 
 /**
@@ -285,8 +297,10 @@ void omx_cleanups(struct omx *omx)
  */
 void omx_close(struct omx *omx)
 {
-    if (omx->output != NULL)
+    if (omx->output != NULL){
         fclose(omx->output);
+        MOTION_LOG(NTC, TYPE_EVENTS, NO_ERRNO, "%s: File closed");
+    }
     omx_cleanups(omx);
 }
 

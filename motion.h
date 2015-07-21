@@ -458,13 +458,13 @@ struct context {
     char extpipefilename[PATH_MAX];
     int movie_last_shot;
 
-#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
+#if defined(HAVE_FFMPEG) || defined(HAVE_OMX)
 #ifdef HAVE_FFMPEG
     struct ffmpeg *ffmpeg_output;
     struct ffmpeg *ffmpeg_output_debug;
     struct ffmpeg *ffmpeg_timelapse;
     struct ffmpeg *ffmpeg_smartmask;
-#elif HAVE_OMS
+#elif HAVE_OMX
     struct omx *omx_output;
 #endif
     char timelapsefilename[PATH_MAX];

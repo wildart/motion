@@ -760,7 +760,7 @@ config_param config_params[] = {
     copy_string,
     print_string
     },
-#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
+#if defined(HAVE_FFMPEG) || defined(HAVE_OMX)
     {
     "ffmpeg_output_movies",
     "\n############################################################\n"
@@ -1064,7 +1064,7 @@ config_param config_params[] = {
     copy_string,
     print_string
     },
-#ifdef defined(HAVE_FFMPEG) || defined(HAVE_OMX)
+#if defined(HAVE_FFMPEG) || defined(HAVE_OMX)
     {
     "movie_filename",
     "# File path for motion triggered ffmpeg films (movies) relative to target_dir\n"

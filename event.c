@@ -889,7 +889,7 @@ static void event_omx_put(struct context *cnt, int type ATTRIBUTE_UNUSED,
             unsigned char *dummy1 ATTRIBUTE_UNUSED, char *dummy2 ATTRIBUTE_UNUSED,
             void * eventdata, struct tm *tm ATTRIBUTE_UNUSED)
 {
-    if (cnt->ffmpeg_output) {
+    if (cnt->omx_output) {
         struct image_data* imgdat = (struct image_data*)eventdata;
         FFMPEG_SELECT_IMAGE;
 

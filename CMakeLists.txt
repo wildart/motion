@@ -30,6 +30,7 @@ include_directories(
 					${USERLANDPATH}/include/interface/vcos/pthreads
 					${USERLANDPATH}/include/interface/vmcs_host/linux
 					${USERLANDPATH}/include/interface/vmcs_host
+					${USERLANDPATH}/src/hello_pi/libs/ilclient/
 					)
 
 add_definitions(	-DVERSION="mmaltest"
@@ -52,7 +53,8 @@ else()
 endif()
 
 link_directories(
-				${ROOTFSPATH}/opt/vc/lib
+				${USERLANDPATH}/lib
+				${USERLANDPATH}/src/hello_pi/libs/ilclient/
 				)
 
 add_executable(motion
@@ -62,6 +64,7 @@ add_executable(motion
 				draw.c
 				event.c
 				ffmpeg.c
+				omx.c
 				filecam.c
 				jpegutils.c
 				logger.c
@@ -101,6 +104,8 @@ target_link_libraries(motion
 						mmal_core
 						mmal_util
 						mmal_vc_client
+						openmaxil
+						ilclient
 						-Xlinker -rpath-link=${ROOTFSPATH}/usr/lib/arm-linux-gnueabihf -Xlinker -rpath-link=${ROOTFSPATH}/lib/arm-linux-gnueabihf
 						)
 

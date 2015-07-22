@@ -13,6 +13,7 @@ struct omx {
     OMX_VIDEO_PARAM_PORTFORMATTYPE format;
     OMX_PARAM_PORTDEFINITIONTYPE def;
     OMX_VIDEO_PARAM_BITRATETYPE bitrateType;
+    OMX_STATETYPE state;
     FILE *output;
 
     int width;

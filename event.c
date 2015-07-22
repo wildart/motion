@@ -829,6 +829,8 @@ static void event_omx_newfile(struct context *cnt, int type ATTRIBUTE_UNUSED,
     struct image_data* imgdat = (struct image_data*) eventdata;
     FFMPEG_SELECT_IMAGE;
 
+    MOTION_LOG(NTC, TYPE_EVENTS, NO_ERRNO, "%s: secondary image type %d, size %d", cnt->imgs.secondary_type, imgdat->secondary_size);
+
     unsigned char *convbuf, *y, *u, *v;
     char stamp[PATH_MAX];
     const char *moviepath;

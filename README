@@ -1,3 +1,27 @@
+RPi GPU ENCODING
+----------------
+This code is based on on MMAL branch. GPU encoding desined to work instead of
+FFMPEG backend encoder, so all FFMPEG options in the configuration file
+will work with RPi GPU encoding.
+
+To get a better video resolution from MMAL device, disable JPEG compression on secondary buffer (set mmalcam_secondary_buffer_jpeg to 0).
+
+Tested on: Linux alarmpi 4.0.8-1-ARCH #1 PREEMPT Mon Jul 13 19:01:02 MDT 2015
+
+Dependencies:
+- libjpeg
+- libraries from /opt/vc/lib
+- libilclient (need to build from /opt/vc/src/hello_pi/libs/ilclient)
+
+Building:
+    git checkout omx
+    mkdir build
+    cd build
+    cmake ..
+    make
+
+Use configuration file: motion-mmalcam-omx.conf
+
 MMAL README
 -----------
 This is an experimental version of motion that adds support for the
